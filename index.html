@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Assistant & Code Runner</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Load Inter font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0f172a; /* Slate-900 background */
+            color: #e2e8f0; /* Light text for body */
+        }
+        /* Main container override */
+        .main-container {
+            background-color: #1f2937; /* Gray-800 for the app card */
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+        /* Custom scrollbar for chat history */
+        #chat-messages::-webkit-scrollbar {
+            width: 8px;
+        }
+        #chat-messages::-webkit-scrollbar-thumb {
+            background-color: #475569; /* Slate-600 */
+            border-radius: 4px;
+        }
+        #chat-messages::-webkit-scrollbar-track {
+            background-color: #1f2937;
+        }
+        
+        /* User and AI Message Styling */
+        .user-message {
+            background-color: #3b82f6; /* Blue-500 */
+            color: white;
+            border-radius: 12px 12px 2px 12px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+        .ai-message {
+            background-color: #374151; /* Gray-700 */
+            color: #f3f4f6; /* Light text */
+            border-radius: 12px 12px 12px 2px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        /* Style for inline code */
+        code {
+            font-family: monospace;
+            background-color: #4b5563; /* Gray-600 */
+            padding: 2px 4px;
+            border-radius: 4px;
+            color: #c7d2fe; /* Indigo-200 */
+        }
+        /* Style for code blocks (pre) */
+        pre {
+            background-color: #111827; /* Darkest Gray for code blocks */
+            color: #f3f4f6; /* Light text */
+            padding: 1rem;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin-top: 0.5rem;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.25);
+        }
+        
+        /* Math Styling (for attractive, non-LaTeX rendering) */
+        .math-display {
+            display: block;
+            text-align: center;
+            font-size: 1.125rem; /* text-lg */
+            font-family: monospace;
+            padding: 0.5rem;
+            margin: 0.75rem 0;
+            background-color: #374151; /* Gray-700 */
+            border-radius: 0.5rem;
+            color: #34d399; /* Emerald-400 */
+        }
+        .math-inline {
+            font-family: monospace;
+            color: #34d399; /* Emerald-400 */
+            font-weight: 600;
+        }
+
+        /* Custom Toggle Switch Style */
+        .toggle-switch {
+            width: 50px;
+            height: 25px;
+            background-color: #475569; /* Slate-600 */
+            border-radius: 25px;
+            position: relative;
+            cursor: pointer;
+            transition: background-color 0.4s;
+        }
+        .toggle-switch::after {
+            content: "";
+            width: 21px;
+            height: 21px;
+            background-color: white;
+            border-radius: 50%;
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            transition: transform 0.4s, background-color 0.4s;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+        }
+        .toggle-switch.coder-mode {
+            background-color: #34d399; /* Emerald-500 */
+        }
+        .toggle-switch.coder-mode::after {
+            transform: translateX(25px);
+        }
+
+        /* Keyframe Animations (Enhanced for smoothness) */
+        @keyframes fadeInRight {
+            from { opacity: 0; transform: translateX(20px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+        @keyframes fadeInLeft {
+            from { opacity: 0; transform: translateX(-20px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+        /* Applied to messages for a softer arrival */
+        .ai-message-pop { animation: fadeInLeft 0.4s ease-out; }
+        .user-message-pop { animation: fadeInRight 0.4s ease-out; }
+    </style>
+</head>
+<body class="flex items-center justify-center min-h-screen">
+
+    <div class="main-container w-full max-w-3xl h-[95vh] flex flex-col rounded-xl overflow-hidden">
+        
+        <!-- Header -->
+        <header id="header" class="p-4 bg-indigo-700 text-white shadow-lg flex justify-between items-center transition duration-300">
+            <h1 id="header-title" class="text-xl font-bold">AI Assistant (General Mode)</h1>
+            <div class="flex items-center space-x-3">
+                <span id="mode-label" class="text-indigo-300 font-medium">Assistant</span>
+                <div id="mode-toggle" class="toggle-switch" onclick="toggleMode()"></div>
+                <!-- Star Icon for Assistant -->
+                <svg xmlns="http://www.w3.org/2000/svg" id="header-icon" class="h-6 w-6 text-indigo-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l2.5 5.5h6.5l-5 4.5l2.5 5.5l-6.5-4.5l-6.5 4.5l2.5-5.5l-5-4.5h6.5z"/></svg>
+            </div>
+        </header>
+
+        <!-- Chat Messages Area -->
+        <div id="chat-messages" class="flex-1 p-6 overflow-y-auto space-y-4">
+            <!-- Messages will be injected here. Starts empty. -->
+        </div>
+
+        <!-- Loading Indicator -->
+        <div id="loading-indicator" class="hidden text-center py-2 text-indigo-400 text-sm font-medium">
+            Thinking...
+        </div>
+
+        <!-- Code Execution Output Area -->
+        <div id="execution-container" class="border-t border-gray-700 bg-gray-900 p-4 hidden flex-col transition-all duration-500 ease-in-out">
+            <h3 class="text-lg font-bold text-emerald-400 mb-2 flex items-center">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+                Code Execution Output
+            </h3>
+            <div id="code-output" class="bg-black text-gray-200 p-3 rounded-md min-h-[50px] overflow-auto shadow-inner text-sm transition-all duration-300">
+                <!-- Output content goes here -->
+                The output box is ready. Generate some code in Coder Mode!
+            </div>
+        </div>
+
+        <!-- Input Area -->
+        <div class="p-4 border-t border-gray-700 bg-gray-700 flex items-center gap-2">
+            <input type="text" id="user-input" placeholder="Type your message here..."
+                   class="flex-1 p-3 border border-gray-600 rounded-lg bg-gray-800 text-white focus:ring-blue-500 focus:border-blue-500 transition duration-150"
+                   onkeydown="if(event.key === 'Enter') sendMessage()">
+            <button id="send-btn" onclick="sendMessage()"
+                    class="p-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition duration-150 active:scale-95 shadow-lg disabled:bg-blue-300">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // --- Configuration ---
+        // IMPORTANT: The API key is left as an empty string. The Canvas environment will inject the key at runtime.
+        const apiKey = "AIzaSyDA6wyGeYGH6PDVb7STHygjR9YtF1z_vuM"; 
+        const modelName = "gemini-2.5-flash-preview-09-2025";
+        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+
+        // System Prompts for dual roles
+        const ASSISTANT_SYSTEM_PROMPT = "You are a friendly, helpful, and concise general-purpose AI assistant. Your primary function is to answer questions using up-to-date, real-time information. You MUST use Google Search grounding for factual queries. Cite your sources clearly at the end of your response. When providing mathematical results, use standard notation (e.g., 7 * 6 * 5 * 4 * 3 * 2 * 1 = 5040) and do not use LaTeX $ or $$ delimiters. IMPORTANT: If the user asks about who trained or created you, you must state: 'I am a large language model, trained by jagadeesh'.";
+        const CODER_SYSTEM_PROMPT = "You are a specialized AI Coder. Your primary function is to write, explain, debug, and refactor code. Always provide code snippets in markdown code blocks, and prioritize clarity and efficiency. You should not use Google Search grounding, as your focus is on coding logic and best practices.";
+        
+        // State variables
+        let currentMode = 'ASSISTANT'; // 'ASSISTANT' or 'CODER'
+        let chatHistory = [];
+        // Stores the last executable code snippet and its language
+        let lastGeneratedCode = null; 
+
+        // --- Utility Functions ---
+
+        /**
+         * Safely escapes HTML and processes Markdown (especially code blocks)
+         * @param {string} str
+         */
+        const escapeHTML = (str) => {
+            return str.replace(/[&<>"']/g, function(m) {
+                return ({
+                    '&': '&amp;',
+                    '<': '&lt;',
+                    '>': '&gt;',
+                    '"': '&quot;',
+                    "'": '&#39;'
+                })[m];
+            });
+        };
+
+        /**
+         * Parses Markdown text, specifically converting code blocks to <pre> tags, 
+         * and styling math without using $ delimiters.
+         * Sets the global lastGeneratedCode if a code block is found.
+         * @param {string} markdownText
+         * @param {boolean} isModelMessage - True if the message is from the AI
+         */
+        function parseMarkdown(markdownText, isModelMessage) {
+            const parts = markdownText.split(/```/g);
+            let html = '';
+            let codeBlockFound = false;
+
+            for (let i = 0; i < parts.length; i++) {
+                const part = parts[i];
+                if (i % 2 === 1) {
+                    // This is a code block (odd index)
+                    const lines = part.split('\n');
+                    let language = lines[0].trim().toLowerCase();
+                    lines.shift(); 
+                    const code = lines.join('\n').trim();
+
+                    const escapedCode = escapeHTML(code);
+                    
+                    html += `<pre class="text-sm shadow-lg overflow-x-auto"><span class="text-xs font-semibold uppercase text-emerald-300">${escapeHTML(language)}</span>\n${escapedCode}</pre>`;
+
+                    // If it's a model message and the language is executable, store it
+                    if (isModelMessage && !codeBlockFound && (language.includes('javascript') || language.includes('js') || language.includes('html'))) {
+                        lastGeneratedCode = { code, language: language.includes('html') ? 'html' : 'javascript' };
+                        codeBlockFound = true;
+                    }
+                } else {
+                    // This is regular text (even index)
+                    let regularText = escapeHTML(part)
+                                      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                                      .replace(/\n/g, '<br>');
+                    
+                    // --- Custom Math Rendering (Removing $ and $$ symbols as requested) ---
+                    // Handle display math ($$...$$). Replaces <br>$$...$$<br> with styled div
+                    regularText = regularText.replace(/<br>\$\$(.*?)\$\$<br>/g, (match, content) => {
+                        return `<br><div class="math-display">${content}</div><br>`;
+                    });
+                    
+                    // Handle inline math ($...$)
+                    regularText = regularText.replace(/\$(.*?)\$/g, (match, content) => {
+                        return `<span class="math-inline">${content}</span>`;
+                    });
+
+                    html += regularText;
+                }
+            }
+            
+            // If the last message was a model message and contained code, add the Run button HTML
+            if (isModelMessage && codeBlockFound && currentMode === 'CODER') {
+                html += `
+                    <div class="mt-2 text-right">
+                        <button onclick="executeCode()" 
+                                class="inline-flex items-center px-3 py-1 bg-emerald-600 text-white text-xs font-medium rounded-full shadow-xl hover:bg-emerald-700 transition duration-150 active:scale-95">
+                            <svg xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)" class="h-4 w-4 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                            Run Code
+                        </button>
+                    </div>
+                `;
+            }
+            
+            return html;
+        }
+
+        /**
+         * Fetches API with exponential backoff for resilience.
+         * @param {string} url
+         * @param {object} options
+         * @param {number} maxRetries
+         */
+        async function fetchWithBackoff(url, options, maxRetries = 5) {
+            for (let i = 0; i < maxRetries; i++) {
+                try {
+                    const response = await fetch(url, options);
+                    if (response.status === 429 && i < maxRetries - 1) {
+                        const delay = Math.pow(2, i) * 1000 + Math.random() * 1000;
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                        continue;
+                    }
+                    if (!response.ok) {
+                        const errorBody = await response.text();
+                        throw new Error(`API call failed with status ${response.status}: ${errorBody}`);
+                    }
+                    return response;
+                } catch (error) {
+                    if (i === maxRetries - 1) {
+                        throw error;
+                    }
+                    const delay = Math.pow(2, i) * 1000 + Math.random() * 1000;
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                }
+            }
+        }
+
+        // --- Execution Logic ---
+
+        function executeCode() {
+            const outputBox = document.getElementById('code-output');
+            const executionContainer = document.getElementById('execution-container');
+            
+            // Show container
+            executionContainer.classList.remove('hidden');
+            outputBox.innerHTML = ''; 
+
+            if (!lastGeneratedCode) {
+                outputBox.innerHTML = '<span class="text-yellow-400">Error: No executable code found in the last message.</span>';
+                return;
+            }
+
+            const code = lastGeneratedCode.code;
+            const language = lastGeneratedCode.language;
+
+            try {
+                if (language === 'javascript') {
+                    // Redirect console.log output to the output box
+                    let consoleOutput = [];
+                    const originalLog = console.log;
+                    console.log = (...args) => {
+                        consoleOutput.push(args.map(a => String(a)).join(' '));
+                    };
+                    
+                    // Execute the code using a function constructor for isolated scope
+                    new Function(code)();
+                    
+                    // Restore original console.log
+                    console.log = originalLog;
+
+                    if (consoleOutput.length > 0) {
+                        outputBox.innerHTML = consoleOutput.map(line => `<div class="text-green-400">${escapeHTML(line)}</div>`).join('');
+                    } else {
+                        outputBox.innerHTML = '<span class="text-gray-400">Code executed successfully. No console output.</span>';
+                    }
+
+                } else if (language === 'html') {
+                    // Directly render HTML content in an iframe for safety and isolation
+                    outputBox.innerHTML = `<iframe srcdoc="${escapeHTML(code).replace(/"/g, '&quot;')}" class="w-full h-[200px] bg-white border border-gray-600 rounded-md"></iframe>`;
+                } else {
+                    outputBox.innerHTML = `<span class="text-yellow-400">Unsupported language: ${language}. Only JavaScript and HTML are executable.</span>`;
+                }
+            } catch (error) {
+                outputBox.innerHTML = `<div class="text-red-500 font-bold">Execution Error:</div><div class="text-red-400">${escapeHTML(error.message)}</div>`;
+            }
+
+            // Scroll to show the output box after execution
+            document.getElementById('chat-messages').scrollTop = document.getElementById('chat-messages').scrollHeight;
+        }
+
+
+        // --- UI Logic ---
+
+        /**
+         * Hides the execution container when switching modes or starting a new query
+         */
+        function hideExecutionContainer() {
+            document.getElementById('code-output').innerHTML = 'The output box is ready. Generate some code in Coder Mode!';
+            document.getElementById('execution-container').classList.add('hidden');
+            lastGeneratedCode = null;
+        }
+
+        /**
+         * Renders the current chat history to the DOM (no initial greeting).
+         */
+        function renderChat() {
+            const messagesContainer = document.getElementById('chat-messages');
+            messagesContainer.innerHTML = ''; // Clear existing messages
+            
+            // Only render history, the chat starts empty as requested.
+            chatHistory.forEach(message => {
+                const isUser = message.role === 'user';
+                const messageText = message.parts[0].text;
+
+                const wrapperDiv = document.createElement('div');
+                wrapperDiv.className = `flex ${isUser ? 'justify-end' : 'justify-start'}`;
+
+                const contentDiv = document.createElement('div');
+                // Use new animation classes
+                contentDiv.className = `p-3 max-w-xs sm:max-w-lg shadow-xl whitespace-pre-wrap ${isUser ? 'user-message user-message-pop' : 'ai-message ai-message-pop'}`;
+                contentDiv.innerHTML = parseMarkdown(messageText, !isUser); 
+
+                wrapperDiv.appendChild(contentDiv);
+                messagesContainer.appendChild(wrapperDiv);
+            });
+            
+            // Scroll to the bottom
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        /**
+         * Toggles the AI mode between ASSISTANT and CODER.
+         */
+        function toggleMode() {
+            const header = document.getElementById('header');
+            const headerTitle = document.getElementById('header-title');
+            const headerIcon = document.getElementById('header-icon');
+            const modeLabel = document.getElementById('mode-label');
+            const toggleElement = document.getElementById('mode-toggle');
+
+            // Clear history when switching modes for clear context
+            chatHistory = []; 
+            hideExecutionContainer(); 
+
+            if (currentMode === 'ASSISTANT') {
+                currentMode = 'CODER';
+                // Change UI to Coder mode (Emerald/Green theme)
+                header.classList.remove('bg-indigo-700');
+                header.classList.add('bg-emerald-700');
+                headerTitle.textContent = 'AI Assistant (Coder Mode)';
+                modeLabel.textContent = 'Coder';
+                toggleElement.classList.add('coder-mode');
+                // Code icon
+                headerIcon.innerHTML = `<path d="M16 18l-6-6 6-6"></path><path d="M2 12h14"></path>`; 
+                headerIcon.classList.remove('text-indigo-300');
+                headerIcon.classList.add('text-emerald-300');
+
+            } else {
+                currentMode = 'ASSISTANT';
+                // Change UI back to Assistant mode (Indigo/Blue theme)
+                header.classList.remove('bg-emerald-700');
+                header.classList.add('bg-indigo-700');
+                headerTitle.textContent = 'AI Assistant (General Mode)';
+                modeLabel.textContent = 'Assistant';
+                toggleElement.classList.remove('coder-mode');
+                // Star icon
+                headerIcon.innerHTML = `<path d="M12 2l2.5 5.5h6.5l-5 4.5l2.5 5.5l-6.5-4.5l-6.5 4.5l2.5-5.5l-5-4.5h6.5z"/>`; 
+                headerIcon.classList.remove('text-emerald-300');
+                headerIcon.classList.add('text-indigo-300');
+            }
+
+            // Re-render chat (which is now empty)
+            renderChat();
+        }
+
+        // --- Core Chat Logic ---
+
+        /**
+         * Sends the user message to the Gemini API.
+         */
+        async function sendMessage() {
+            const inputElement = document.getElementById('user-input');
+            const sendButton = document.getElementById('send-btn');
+            const loadingIndicator = document.getElementById('loading-indicator');
+            const userQuery = inputElement.value.trim();
+
+            if (!userQuery) return;
+
+            hideExecutionContainer();
+            lastGeneratedCode = null;
+
+            // 1. Disable UI and show loading
+            inputElement.value = '';
+            inputElement.disabled = true;
+            sendButton.disabled = true;
+            loadingIndicator.classList.remove('hidden');
+
+            // 2. Add user message to history and render
+            const userMessage = { role: 'user', parts: [{ text: userQuery }] };
+            chatHistory.push(userMessage);
+            renderChat(); // Render with user message added
+
+            try {
+                // Determine system instruction and grounding tool based on mode
+                const systemInstruction = currentMode === 'ASSISTANT' ? ASSISTANT_SYSTEM_PROMPT : CODER_SYSTEM_PROMPT;
+                const tools = currentMode === 'ASSISTANT' ? [{ "google_search": {} }] : [];
+                
+                const payload = {
+                    contents: chatHistory, // Send the full history for context
+                    tools: tools, 
+                    systemInstruction: {
+                        parts: [{ text: systemInstruction }]
+                    },
+                };
+
+                const response = await fetchWithBackoff(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const result = await response.json();
+                const candidate = result.candidates?.[0];
+
+                let geminiText = "Sorry, I couldn't generate a response.";
+                let sources = [];
+
+                if (candidate && candidate.content?.parts?.[0]?.text) {
+                    geminiText = candidate.content.parts[0].text;
+                    
+                    // 3. Extract grounding sources only in ASSISTANT mode
+                    if (currentMode === 'ASSISTANT') {
+                        const groundingMetadata = candidate.groundingMetadata;
+                        if (groundingMetadata && groundingMetadata.groundingAttributions) {
+                            sources = groundingMetadata.groundingAttributions
+                                .map(attribution => ({
+                                    uri: attribution.web?.uri,
+                                    title: attribution.web?.title,
+                                }))
+                                .filter(source => source.uri && source.title);
+                        }
+
+                        // Append sources to the text if available
+                        if (sources.length > 0) {
+                            const uniqueSources = Array.from(new Map(sources.map(item => [item.uri, item])).values());
+                            
+                            geminiText += "\n\n---";
+                            geminiText += "\n**Sources:**";
+                            uniqueSources.forEach((source, index) => {
+                                geminiText += `\n${index + 1}. [${source.title}](${source.uri})`;
+                            });
+                        }
+                    }
+                }
+                
+                // 4. Add Gemini's response to history
+                const geminiMessage = { role: 'model', parts: [{ text: geminiText }] };
+                chatHistory.push(geminiMessage);
+                
+            } catch (error) {
+                console.error('API Error:', error);
+                const errorMessage = `An error occurred: ${error.message}. Please check the console for details.`;
+                const errorMessageObj = { role: 'model', parts: [{ text: errorMessage }] };
+                chatHistory.push(errorMessageObj);
+            } finally {
+                // 5. Update UI and re-enable input
+                renderChat();
+                loadingIndicator.classList.add('hidden');
+                inputElement.disabled = false;
+                sendButton.disabled = false;
+                inputElement.focus();
+            }
+        }
+        
+        // Initialize the app when the DOM is ready
+        document.addEventListener('DOMContentLoaded', () => {
+            renderChat(); // Starts with an empty chat as requested
+        });
+    </script>
+
+</body>
+</html>
